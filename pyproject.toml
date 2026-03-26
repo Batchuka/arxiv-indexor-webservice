@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "arxiv-indexor"
+version = "0.1.0"
+description = "Indexador diário de artigos do arXiv com classificação via Claude e resumo automatizado"
+authors = ["Matheus Corteletti Delfino <matheus.corteletti.del@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+feedparser = "^6.0"
+anthropic = "^0.42"
+fastapi = "^0.115"
+uvicorn = {version = "^0.34", extras = ["standard"]}
+jinja2 = "^3.1"
+python-dotenv = "^1.0"
+pydantic-settings = "^2.7"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

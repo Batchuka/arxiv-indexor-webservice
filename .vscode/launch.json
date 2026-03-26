@@ -1,0 +1,39 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Fetch (indexar artigos)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "arxiv_indexor",
+            "args": ["fetch"],
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": true
+        },
+        {
+            "name": "Serve (interface web)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "arxiv_indexor",
+            "args": ["serve"],
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": true
+        },
+        {
+            "name": "Serve (sem reload, breakpoints)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "arxiv_indexor.web:app",
+                "--host", "0.0.0.0",
+                "--port", "8000"
+            ],
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": true
+        }
+    ]
+}

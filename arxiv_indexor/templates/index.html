@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>arXiv Indexor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+        h1 { font-size: 1.5rem; margin-bottom: 4px; }
+        .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 20px; }
+
+        nav { display: flex; gap: 8px; margin-bottom: 24px; }
+        nav a {
+            padding: 8px 16px; border-radius: 6px; text-decoration: none;
+            color: #555; background: #e8e8e8; font-size: 0.9rem;
+        }
+        nav a.active { background: #333; color: #fff; }
+
+        /* Status card */
+        .status-card {
+            background: #fff; border-radius: 8px; padding: 16px;
+            margin-bottom: 24px; border-left: 4px solid #ccc;
+        }
+        .status-card.success { border-left-color: #22c55e; }
+        .status-card.error { border-left-color: #ef4444; }
+        .status-card.running { border-left-color: #f59e0b; }
+        .status-label { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #888; }
+        .status-detail { font-size: 0.9rem; margin-top: 4px; }
+
+        /* Articles */
+        .article {
+            background: #fff; border-radius: 8px; padding: 16px;
+            margin-bottom: 12px;
+        }
+        .article-title { font-size: 1rem; font-weight: 600; }
+        .article-title a { color: #1a0dab; text-decoration: none; }
+        .article-title a:hover { text-decoration: underline; }
+        .article-meta { font-size: 0.8rem; color: #888; margin-top: 4px; }
+        .article-abstract {
+            font-size: 0.85rem; color: #555; margin-top: 8px;
+            line-height: 1.5; max-height: 4.5em; overflow: hidden;
+        }
+        .article-summary {
+            font-size: 0.9rem; color: #1a6b3a; margin-top: 8px;
+            padding: 8px; background: #f0fdf4; border-radius: 4px;
+        }
+        .score {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-weight: 600; font-size: 0.8rem; color: #fff;
+        }
+        .score-high { background: #22c55e; }
+        .score-mid { background: #f59e0b; }
+        .score-low { background: #94a3b8; }
+
+        .empty { text-align: center; padding: 40px; color: #999; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>arXiv Indexor</h1>
+    <p class="subtitle">Indexador diario de artigos — quant-ph, cs.CL, cs.LG</p>
+
+    <nav>
+        <a href="/" class="{{ 'active' if tab == 'today' }}">Hoje</a>
+        <a href="/history" class="{{ 'active' if tab == 'history' }}">Historico</a>
+        <a href="/status" class="{{ 'active' if tab == 'status' }}">Status</a>
+    </nav>
+
+    {% if tab == 'status' or last_run %}
+    <div class="status-card {{ last_run.status if last_run else '' }}">
+        <div class="status-label">Ultima execucao</div>
+        {% if last_run %}
+        <div class="status-detail">
+            <strong>{{ last_run.status | upper }}</strong>
+            &mdash; {{ last_run.started_at }}
+            &mdash; {{ last_run.articles_fetched }} buscados, {{ last_run.articles_classified }} classificados
+            {% if last_run.error %}
+            <br><span style="color:#ef4444;">Erro: {{ last_run.error }}</span>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="status-detail">Nenhuma execucao registrada. Execute <code>python -m arxiv_indexor fetch</code></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if tab in ('today', 'history') %}
+        {% if articles %}
+            {% for a in articles %}
+            <div class="article">
+                <div class="article-title">
+                    <a href="{{ a.link }}" target="_blank">{{ a.title }}</a>
+                    {% if a.score is not none %}
+                        {% if a.score >= 7 %}
+                        <span class="score score-high">{{ "%.1f" | format(a.score) }}</span>
+                        {% elif a.score >= 4 %}
+                        <span class="score score-mid">{{ "%.1f" | format(a.score) }}</span>
+                        {% else %}
+                        <span class="score score-low">{{ "%.1f" | format(a.score) }}</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="article-meta">
+                    {{ a.category }} &middot; {{ a.authors[:100] }}{% if a.authors|length > 100 %}...{% endif %}
+                    &middot; {{ a.published or a.fetched_at }}
+                </div>
+                {% if a.summary %}
+                <div class="article-summary">{{ a.summary }}</div>
+                {% endif %}
+                <div class="article-abstract">{{ a.abstract[:300] }}{% if a.abstract|length > 300 %}...{% endif %}</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty">
+                {% if tab == 'today' %}
+                    Nenhum artigo hoje. Execute <code>python -m arxiv_indexor fetch</code>
+                {% else %}
+                    Nenhum artigo no historico.
+                {% endif %}
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+</body>
+</html>
