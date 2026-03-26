@@ -36,15 +36,23 @@ def init_db():
             error TEXT
         );
     """)
+    # Migration: add token tracking columns if not yet present
+    for col, typedef in [("input_tokens", "INTEGER DEFAULT 0"), ("output_tokens", "INTEGER DEFAULT 0")]:
+        try:
+            conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
     conn.close()
 
 
-def insert_article(conn: sqlite3.Connection, article: dict):
-    conn.execute("""
+def insert_article(conn: sqlite3.Connection, article: dict) -> bool:
+    """Returns True if the article was newly inserted, False if it already existed."""
+    cur = conn.execute("""
         INSERT OR IGNORE INTO articles (id, title, authors, abstract, category, published, link)
         VALUES (:id, :title, :authors, :abstract, :category, :published, :link)
     """, article)
+    return cur.rowcount == 1
 
 
 def update_score(conn: sqlite3.Connection, article_id: str, score: float, summary: str | None = None):
@@ -87,13 +95,14 @@ def get_all_articles(conn: sqlite3.Connection, limit: int = 200) -> list[dict]:
 def insert_run(conn: sqlite3.Connection) -> int:
     cur = conn.execute("INSERT INTO runs (status) VALUES ('running')")
     conn.commit()
+    assert cur.lastrowid is not None
     return cur.lastrowid
 
 
-def finish_run(conn: sqlite3.Connection, run_id: int, status: str, fetched: int, classified: int, error: str | None = None):
+def finish_run(conn: sqlite3.Connection, run_id: int, status: str, fetched: int, classified: int, error: str | None = None, input_tokens: int = 0, output_tokens: int = 0):
     conn.execute(
-        "UPDATE runs SET status = ?, articles_fetched = ?, articles_classified = ?, error = ? WHERE id = ?",
-        (status, fetched, classified, error, run_id),
+        "UPDATE runs SET status = ?, articles_fetched = ?, articles_classified = ?, error = ?, input_tokens = ?, output_tokens = ? WHERE id = ?",
+        (status, fetched, classified, error, input_tokens, output_tokens, run_id),
     )
     conn.commit()
 

@@ -11,12 +11,52 @@
         h1 { font-size: 1.5rem; margin-bottom: 4px; }
         .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 20px; }
 
-        nav { display: flex; gap: 8px; margin-bottom: 24px; }
+        nav { display: flex; gap: 8px; margin-bottom: 24px; align-items: center; }
         nav a {
             padding: 8px 16px; border-radius: 6px; text-decoration: none;
             color: #555; background: #e8e8e8; font-size: 0.9rem;
         }
         nav a.active { background: #333; color: #fff; }
+        .btn {
+            padding: 8px 18px; border-radius: 6px; border: none;
+            font-size: 0.9rem; cursor: pointer; color: #fff;
+        }
+        .btn-blue  { background: #2563eb; }
+        .btn-blue:hover  { background: #1d4ed8; }
+        .btn-green { background: #16a34a; }
+        .btn-green:hover { background: #15803d; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Progress card */
+        .progress-card {
+            background: #fff; border-radius: 8px; padding: 16px;
+            margin-bottom: 16px; border-left: 4px solid #f59e0b;
+        }
+        .progress-header {
+            display: flex; justify-content: space-between; align-items: baseline;
+            margin-bottom: 10px; font-size: 0.9rem;
+        }
+        .progress-step { font-weight: 600; }
+        .progress-meta { color: #888; font-size: 0.82rem; }
+        .progress-cost-live { font-weight: 700; color: #b45309; }
+        .progress-track {
+            height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; background: #f59e0b; border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .progress-card.done { border-left-color: #22c55e; }
+        .progress-card.error { border-left-color: #ef4444; }
+
+        /* Estimate card */
+        .estimate-card {
+            background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+            padding: 12px 16px; margin-bottom: 16px; font-size: 0.9rem; color: #92400e;
+            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        }
+        .estimate-card .cost { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+        .estimate-actions { display: flex; align-items: center; gap: 12px; }
 
         /* Status card */
         .status-card {
@@ -24,16 +64,21 @@
             margin-bottom: 24px; border-left: 4px solid #ccc;
         }
         .status-card.success { border-left-color: #22c55e; }
-        .status-card.error { border-left-color: #ef4444; }
+        .status-card.error   { border-left-color: #ef4444; }
         .status-card.running { border-left-color: #f59e0b; }
         .status-label { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #888; }
         .status-detail { font-size: 0.9rem; margin-top: 4px; }
 
-        /* Articles */
-        .article {
-            background: #fff; border-radius: 8px; padding: 16px;
-            margin-bottom: 12px;
+        .profile-box { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .profile-box label { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #888; display: block; margin-bottom: 8px; }
+        .profile-box textarea {
+            width: 100%; font-family: monospace; font-size: 0.85rem; color: #333;
+            border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px;
+            resize: vertical; background: #fafafa;
         }
+
+        /* Articles */
+        .article { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
         .article-title { font-size: 1rem; font-weight: 600; }
         .article-title a { color: #1a0dab; text-decoration: none; }
         .article-title a:hover { text-decoration: underline; }
@@ -46,13 +91,10 @@
             font-size: 0.9rem; color: #1a6b3a; margin-top: 8px;
             padding: 8px; background: #f0fdf4; border-radius: 4px;
         }
-        .score {
-            display: inline-block; padding: 2px 8px; border-radius: 4px;
-            font-weight: 600; font-size: 0.8rem; color: #fff;
-        }
+        .score { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.8rem; color: #fff; }
         .score-high { background: #22c55e; }
-        .score-mid { background: #f59e0b; }
-        .score-low { background: #94a3b8; }
+        .score-mid  { background: #f59e0b; }
+        .score-low  { background: #94a3b8; }
 
         .empty { text-align: center; padding: 40px; color: #999; }
     </style>
@@ -66,7 +108,25 @@
         <a href="/" class="{{ 'active' if tab == 'today' }}">Hoje</a>
         <a href="/history" class="{{ 'active' if tab == 'history' }}">Historico</a>
         <a href="/status" class="{{ 'active' if tab == 'status' }}">Status</a>
+        <form method="post" action="/fetch" style="margin-left: auto;" id="form-fetch">
+            <button type="submit" class="btn btn-blue" id="btn-fetch">Buscar artigos</button>
+        </form>
     </nav>
+
+    <!-- Progress card (shown by JS when a task is running) -->
+    <div class="progress-card" id="progress-card" style="display:none;">
+        <div class="progress-header">
+            <span class="progress-step" id="progress-step">Aguardando...</span>
+            <span class="progress-meta">
+                <span id="progress-count"></span>
+                &nbsp;&nbsp;
+                <span class="progress-cost-live" id="progress-cost"></span>
+            </span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+    </div>
 
     {% if tab == 'status' or last_run %}
     <div class="status-card {{ last_run.status if last_run else '' }}">
@@ -76,13 +136,40 @@
             <strong>{{ last_run.status | upper }}</strong>
             &mdash; {{ last_run.started_at }}
             &mdash; {{ last_run.articles_fetched }} buscados, {{ last_run.articles_classified }} classificados
+            {% if last_run.input_tokens %}
+            &mdash; {{ last_run.input_tokens }} in / {{ last_run.output_tokens }} out tokens
+            &mdash; <strong>${{ "%.4f"|format((last_run.input_tokens * 3 + last_run.output_tokens * 15) / 1000000) }}</strong>
+            <span style="color:#aaa;font-size:0.8em;">($3/MTok in, $15/MTok out)</span>
+            {% endif %}
             {% if last_run.error %}
             <br><span style="color:#ef4444;">Erro: {{ last_run.error }}</span>
             {% endif %}
         </div>
         {% else %}
-        <div class="status-detail">Nenhuma execucao registrada. Execute <code>python -m arxiv_indexor fetch</code></div>
+        <div class="status-detail">Nenhuma execucao registrada.</div>
         {% endif %}
+    </div>
+    {% endif %}
+
+    {% if tab == 'today' and estimate and estimate.count > 0 %}
+    <div class="estimate-card">
+        <span>
+            <strong>{{ estimate.count }}</strong> artigo(s) sem classificacao &mdash;
+            ~{{ estimate.input_tokens }} tokens entrada / ~{{ estimate.output_tokens }} saida
+        </span>
+        <div class="estimate-actions">
+            <span class="cost">~${{ "%.4f"|format(estimate.cost_usd) }}</span>
+            <form method="post" action="/classify" id="form-classify">
+                <button type="submit" class="btn btn-green" id="btn-classify">Classificar com IA</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab == 'status' %}
+    <div class="profile-box">
+        <label>Perfil de interesse (criterio de classificacao)</label>
+        <textarea rows="4" readonly>{{ interest_profile }}</textarea>
     </div>
     {% endif %}
 
@@ -115,7 +202,7 @@
         {% else %}
             <div class="empty">
                 {% if tab == 'today' %}
-                    Nenhum artigo hoje. Execute <code>python -m arxiv_indexor fetch</code>
+                    Nenhum artigo hoje. Clique em "Buscar artigos".
                 {% else %}
                     Nenhum artigo no historico.
                 {% endif %}
@@ -123,5 +210,81 @@
         {% endif %}
     {% endif %}
 </div>
+
+<script>
+(function () {
+    const card   = document.getElementById('progress-card');
+    const step   = document.getElementById('progress-step');
+    const count  = document.getElementById('progress-count');
+    const cost   = document.getElementById('progress-cost');
+    const fill   = document.getElementById('progress-fill');
+    const btnF   = document.getElementById('btn-fetch');
+    const btnC   = document.getElementById('btn-classify');
+
+    let timer = null;
+
+    function pct(s) {
+        return s.total > 0 ? Math.round((s.processed / s.total) * 100) : (s.running ? 5 : 100);
+    }
+
+    function render(s) {
+        if (!s.running && !s.done && !s.error) return;
+
+        card.style.display = 'block';
+        card.className = 'progress-card' + (s.done ? ' done' : s.error ? ' error' : '');
+        step.textContent = s.step || '...';
+
+        if (s.total > 0) {
+            count.textContent = s.processed + ' / ' + s.total + ' artigos';
+            fill.style.width = pct(s) + '%';
+        } else {
+            count.textContent = '';
+            fill.style.width = s.done ? '100%' : '30%';
+        }
+
+        if (s.cost_usd > 0) {
+            cost.textContent = '$' + s.cost_usd.toFixed(4) + ' gastos';
+        }
+
+        if (btnF) btnF.disabled = s.running;
+        if (btnC) btnC.disabled = s.running;
+    }
+
+    function poll() {
+        fetch('/progress')
+            .then(r => r.json())
+            .then(s => {
+                render(s);
+                if (!s.running) {
+                    clearInterval(timer);
+                    timer = null;
+                    if (s.done) setTimeout(() => location.reload(), 1500);
+                }
+            })
+            .catch(() => { clearInterval(timer); timer = null; });
+    }
+
+    function startPolling() {
+        if (timer) return;
+        timer = setInterval(poll, 1500);
+    }
+
+    // On page load: check immediately, start polling if something is running
+    fetch('/progress').then(r => r.json()).then(s => {
+        render(s);
+        if (s.running) startPolling();
+    });
+
+    // Disable buttons and start polling when a form is submitted
+    ['form-fetch', 'form-classify'].forEach(id => {
+        const f = document.getElementById(id);
+        if (f) f.addEventListener('submit', () => {
+            if (btnF) btnF.disabled = true;
+            if (btnC) btnC.disabled = true;
+            setTimeout(startPolling, 800);
+        });
+    });
+})();
+</script>
 </body>
 </html>

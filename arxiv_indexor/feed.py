@@ -1,4 +1,5 @@
 import urllib.request
+from typing import Any
 import feedparser
 from arxiv_indexor.db import get_conn, insert_article
 
@@ -12,9 +13,14 @@ def _fetch_xml(url: str) -> str:
         return resp.read().decode("utf-8")
 
 
-def fetch_articles() -> int:
+def fetch_articles() -> tuple[int, list[dict[str, Any]]]:
+    """Fetch articles from arXiv RSS feeds.
+
+    Returns (count_new, new_articles) where new_articles contains only
+    articles not previously seen in the database.
+    """
     conn = get_conn()
-    total = 0
+    new_articles: list[dict[str, Any]] = []
 
     for category in CATEGORIES:
         url = RSS_URL.format(category=category)
@@ -22,21 +28,21 @@ def fetch_articles() -> int:
         feed = feedparser.parse(xml)
 
         for entry in feed.entries:
-            authors = entry.get("author", "")
+            authors = str(entry.get("author", ""))
             # arXiv RSS uses <dc:creator> which feedparser maps to 'author'
             article = {
-                "id": entry.get("id") or entry.get("link", ""),
-                "title": entry.get("title", "").strip(),
+                "id": str(entry.get("id") or entry.get("link", "")),
+                "title": str(entry.get("title", "")).strip(),
                 "authors": authors,
-                "abstract": entry.get("summary", "").strip(),
+                "abstract": str(entry.get("summary", "")).strip(),
                 "category": category,
-                "published": entry.get("published", ""),
-                "link": entry.get("link", ""),
+                "published": str(entry.get("published", "")),
+                "link": str(entry.get("link", "")),
             }
             if article["id"] and article["title"]:
-                insert_article(conn, article)
-                total += 1
+                if insert_article(conn, article):
+                    new_articles.append(article)
 
     conn.commit()
     conn.close()
-    return total
+    return len(new_articles), new_articles
