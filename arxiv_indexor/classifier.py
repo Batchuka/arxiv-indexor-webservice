@@ -1,19 +1,65 @@
 import json
+import re
 from typing import Callable, cast
 import anthropic
 from anthropic.types import TextBlock
 from arxiv_indexor import get_settings
-from arxiv_indexor.db import get_conn, get_unscored_articles, update_score, get_top_articles
+from arxiv_indexor.db import get_conn, get_setting, get_unscored_articles, update_score, get_top_articles, get_top_unsummarized
 
-INTEREST_PROFILE = """
-Primary interest: quantum algorithms — people proposing using qubits to solve different problems.
-Secondary interest: context compression and latent memory for LLMs.
+DEFAULT_INTEREST_PROFILE = """
+TOPIC 1 — Quantum Algorithms
+  Primary: papers proposing quantum algorithms that use qubits to solve computational problems — new algorithms, speedup proofs, circuit constructions, quantum query/gate complexity.
+  Secondary: quantum complexity theory, error correction schemes that directly enable better algorithms, quantum-classical hybrid algorithms, benchmarking frameworks comparing quantum vs. classical performance.
+
+TOPIC 2 — LLM Context & Memory
+  Primary: context compression methods for LLMs, latent/persistent memory across long sequences, memory-augmented transformers, efficient token representation.
+  Secondary: efficient attention mechanisms (linear, sparse, sliding-window), KV cache compression, in-context learning mechanics, long-context architecture design.
 """.strip()
+
+
+def get_interest_profile() -> str:
+    conn = get_conn()
+    profile = get_setting(conn, "interest_profile", DEFAULT_INTEREST_PROFILE)
+    conn.close()
+    return profile
 
 MODEL = "claude-sonnet-4-20250514"
 
 
-def _build_scoring_prompt(articles: list[dict]) -> str:
+def _extract_text_payload(text: str) -> str:
+    clean = text.strip()
+    if clean.startswith("```"):
+        clean = clean.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return clean
+
+
+def _load_json_array(text: str) -> list[dict]:
+    clean = _extract_text_payload(text)
+    candidates = [clean]
+
+    start = clean.find("[")
+    end = clean.rfind("]")
+    if start >= 0 and end > start:
+        candidates.append(clean[start : end + 1])
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, list):
+                return [item for item in data if isinstance(item, dict)]
+        except json.JSONDecodeError:
+            sanitized = re.sub(r",(\s*[}\]])", r"\1", candidate)
+            try:
+                data = json.loads(sanitized)
+                if isinstance(data, list):
+                    return [item for item in data if isinstance(item, dict)]
+            except json.JSONDecodeError:
+                continue
+
+    raise ValueError("Could not parse model response as JSON array")
+
+
+def _build_scoring_prompt(articles: list[dict], profile: str) -> str:
     items = []
     for a in articles:
         items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:500]}")
@@ -22,18 +68,41 @@ def _build_scoring_prompt(articles: list[dict]) -> str:
     return f"""You are an academic paper relevance classifier.
 
 Research interest profile:
-{INTEREST_PROFILE}
+{profile}
 
-Rate each article from 0 to 10 based on relevance to the profile above.
-- 8-10: directly about quantum algorithms or LLM context compression/latent memory
-- 5-7: related topics (quantum computing, NLP, transformers architecture)
+Rate each article from 0 to 10:
+- 9-10: directly about the PRIMARY scope of Topic 1 or Topic 2
+- 7-8: about the SECONDARY scope of Topic 1 or Topic 2 (adjacent within the same topic)
+- 5-6: quantum computing or NLP/ML broadly, but not specifically within either topic's scope
 - 0-4: unrelated or only tangentially related
 
-Return a JSON array with objects having "id" (string) and "score" (number).
+Return a JSON array with objects having "id" (string) and "score" (integer 0-10).
 Only return the JSON array, no other text.
 
 Articles:
 {articles_text}"""
+
+
+def _build_subscore_prompt(articles: list[dict], profile: str) -> str:
+    items = []
+    for a in articles:
+        items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:600]}")
+    body = "\n---\n".join(items)
+
+    return (
+        "These papers scored 9/10 for relevance to this research profile:\n"
+        f"{profile}\n\n"
+        "Assign a fine-grained sub-score from 9.0 to 9.9 (one decimal place).\n\n"
+        "Criteria (PRIMARY scope = Topic 1 or 2 primary; SECONDARY scope = Topic 1 or 2 secondary):\n"
+        "- 9.9  Landmark PRIMARY result — proves a new quantum speedup / solves an open problem, or breakthrough LLM context compression with strong theoretical grounding.\n"
+        "- 9.7-9.8  Strong original PRIMARY contribution with clear novelty and rigorous analysis.\n"
+        "- 9.5-9.6  Solid PRIMARY contribution — meaningfully improves SOTA or applies the core technique creatively.\n"
+        "- 9.3-9.4  Good SECONDARY contribution — clearly within the topic's extended scope, real contribution but not the core focus.\n"
+        "- 9.0-9.2  High relevance but thin on PRIMARY novelty — hardware-focused, simulation without algorithmic insight, empirical-only, or mostly SECONDARY scope.\n\n"
+        "Return a JSON array with objects having \"id\" (string) and \"score\" (number between 9.0 and 9.9, one decimal).\n"
+        "Only return the JSON array, no other text.\n\n"
+        f"Articles:\n{body}"
+    )
 
 
 def _build_summary_prompt(articles: list[dict]) -> str:
@@ -50,10 +119,10 @@ def _build_summary_prompt(articles: list[dict]) -> str:
 
 
 def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[int, int, int]:
-    """Returns (classified_count, input_tokens, output_tokens).
+    """Score unscored articles. Returns (classified_count, input_tokens, output_tokens).
 
-    progress_cb(step, processed, total, input_tokens, output_tokens, cost_usd) is called
-    after each batch so callers can track progress and cost in real time.
+    Articles scoring exactly 9 get a second sub-score pass (9.0–9.9).
+    progress_cb(step, processed, total, input_tokens, output_tokens, cost_usd) is called after each batch.
     """
     settings = get_settings()
     if not settings.anthropic_api_key:
@@ -61,6 +130,7 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     conn = get_conn()
+    profile = get_setting(conn, "interest_profile", DEFAULT_INTEREST_PROFILE)
     articles = get_unscored_articles(conn)
 
     if not articles:
@@ -72,59 +142,141 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
     output_tokens = 0
     total = len(articles)
 
-    # Score in batches of 20 — commit after each batch so a crash loses at most one batch
+    # --- Pass 1: integer scoring (0–10) in batches of 20 ---
     for i in range(0, total, 20):
         batch = articles[i : i + 20]
-        prompt = _build_scoring_prompt(batch)
+        batch_ids = {a["id"] for a in batch}
+        prompt = _build_scoring_prompt(batch, profile)
 
         response = client.messages.create(
             model=MODEL,
             max_tokens=2048,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
         input_tokens += response.usage.input_tokens
         output_tokens += response.usage.output_tokens
 
-        text = cast(TextBlock, response.content[0]).text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-        for item in json.loads(text):
-            update_score(conn, item["id"], item["score"])
-            classified += 1
-
-        conn.commit()  # incremental save after every batch
+        text = cast(TextBlock, response.content[0]).text
+        try:
+            parsed = _load_json_array(text)
+            for item in parsed:
+                article_id = str(item.get("id", "")).strip()
+                if article_id not in batch_ids:
+                    continue
+                try:
+                    score = float(item.get("score"))
+                except (TypeError, ValueError):
+                    continue
+                score = max(0.0, min(10.0, score))
+                update_score(conn, article_id, score)
+                classified += 1
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         if progress_cb:
             cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
             progress_cb(step="scoring", processed=classified, total=total,
                         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 
-    # Generate summaries for top 5
-    top = get_top_articles(conn, n=5)
-    if top:
+    # --- Pass 2: sub-score articles that scored exactly 9 (→ 9.0–9.9) ---
+    nines = [
+        dict(r) for r in conn.execute(
+            "SELECT * FROM articles WHERE score >= 9.0 AND score < 10.0 ORDER BY fetched_at DESC"
+        ).fetchall()
+    ]
+    if nines:
         if progress_cb:
             cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
-            progress_cb(step="summarizing", processed=classified, total=total,
+            progress_cb(step="subscoring", processed=classified, total=total,
                         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 
-        prompt = _build_summary_prompt(top)
+        prompt = _build_subscore_prompt(nines, profile)
         response = client.messages.create(
             model=MODEL,
-            max_tokens=2048,
+            max_tokens=1024,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
         input_tokens += response.usage.input_tokens
         output_tokens += response.usage.output_tokens
 
-        text = cast(TextBlock, response.content[0]).text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        text = cast(TextBlock, response.content[0]).text
+        try:
+            parsed = _load_json_array(text)
+            nine_ids = {a["id"] for a in nines}
+            for item in parsed:
+                article_id = str(item.get("id", "")).strip()
+                if article_id not in nine_ids:
+                    continue
+                try:
+                    score = float(item.get("score"))
+                except (TypeError, ValueError):
+                    continue
+                score = max(9.0, min(9.9, score))
+                conn.execute("UPDATE articles SET score = ? WHERE id = ?", (score, article_id))
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
-        for item in json.loads(text):
-            conn.execute("UPDATE articles SET summary = ? WHERE id = ?", (item["summary"], item["id"]))
-
-        conn.commit()
+        if progress_cb:
+            cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+            progress_cb(step="subscoring", processed=classified, total=total,
+                        input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 
     conn.close()
     return classified, input_tokens, output_tokens
+
+
+def summarize_top_articles(n: int = 5, progress_cb: Callable[..., None] | None = None) -> tuple[int, int, int]:
+    """Generate pt-BR summaries for the top-N unsummarized articles (score >= 9).
+
+    Returns (summarized_count, input_tokens, output_tokens).
+    """
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    conn = get_conn()
+    top = get_top_unsummarized(conn, n=n)
+
+    if not top:
+        conn.close()
+        return 0, 0, 0
+
+    if progress_cb:
+        progress_cb(step="summarizing", processed=0, total=len(top),
+                    input_tokens=0, output_tokens=0, cost_usd=0.0)
+
+    prompt = _build_summary_prompt(top)
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=2048,
+        temperature=0.3,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    input_tokens = response.usage.input_tokens
+    output_tokens = response.usage.output_tokens
+
+    summarized = 0
+    text = cast(TextBlock, response.content[0]).text
+    try:
+        parsed = _load_json_array(text)
+        top_ids = {a["id"] for a in top}
+        for item in parsed:
+            article_id = str(item.get("id", "")).strip()
+            if article_id not in top_ids:
+                continue
+            summary = str(item.get("summary", "")).strip()
+            if not summary:
+                continue
+            conn.execute("UPDATE articles SET summary = ? WHERE id = ?", (summary, article_id))
+            summarized += 1
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+    conn.close()
+    return summarized, input_tokens, output_tokens

@@ -18,14 +18,14 @@
         }
         nav a.active { background: #333; color: #fff; }
         .btn {
-            padding: 8px 18px; border-radius: 6px; border: none;
-            font-size: 0.9rem; cursor: pointer; color: #fff;
+            padding: 7px 16px; border-radius: 6px; border: none;
+            font-size: 0.85rem; cursor: pointer; color: #fff; white-space: nowrap;
         }
         .btn-blue  { background: #2563eb; }
         .btn-blue:hover  { background: #1d4ed8; }
         .btn-green { background: #16a34a; }
         .btn-green:hover { background: #15803d; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
         /* Progress card */
         .progress-card {
@@ -39,43 +39,60 @@
         .progress-step { font-weight: 600; }
         .progress-meta { color: #888; font-size: 0.82rem; }
         .progress-cost-live { font-weight: 700; color: #b45309; }
-        .progress-track {
-            height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%; background: #f59e0b; border-radius: 4px;
-            transition: width 0.4s ease;
-        }
+        .progress-track { height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #f59e0b; border-radius: 4px; transition: width 0.4s ease; }
         .progress-card.done { border-left-color: #22c55e; }
         .progress-card.error { border-left-color: #ef4444; }
 
-        /* Estimate card */
-        .estimate-card {
-            background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
-            padding: 12px 16px; margin-bottom: 16px; font-size: 0.9rem; color: #92400e;
-            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        /* Pipeline panel */
+        .pipeline {
+            background: #fff; border-radius: 8px; margin-bottom: 20px;
+            overflow: hidden; border: 1px solid #e5e7eb;
         }
-        .estimate-card .cost { font-weight: 700; font-size: 1rem; white-space: nowrap; }
-        .estimate-actions { display: flex; align-items: center; gap: 12px; }
+        .pipeline-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 16px; border-bottom: 1px solid #f0f0f0;
+        }
+        .pipeline-row:last-child { border-bottom: none; }
+        .pipeline-label {
+            font-weight: 600; font-size: 0.88rem; min-width: 130px;
+        }
+        .pipeline-status {
+            flex: 1; font-size: 0.82rem; color: #888;
+        }
+        .pipeline-status .ok   { color: #16a34a; font-weight: 600; }
+        .pipeline-status .warn { color: #b45309; font-weight: 600; }
+        .pipeline-status .none { color: #aaa; }
+        .pipeline-cost { font-size: 0.82rem; color: #b45309; font-weight: 700; margin-right: 8px; }
 
         /* Status card */
         .status-card {
-            background: #fff; border-radius: 8px; padding: 16px;
-            margin-bottom: 24px; border-left: 4px solid #ccc;
+            background: #fff; border-radius: 8px; padding: 14px 16px;
+            margin-bottom: 20px; border-left: 4px solid #ccc;
         }
         .status-card.success { border-left-color: #22c55e; }
         .status-card.error   { border-left-color: #ef4444; }
         .status-card.running { border-left-color: #f59e0b; }
-        .status-label { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #888; }
-        .status-detail { font-size: 0.9rem; margin-top: 4px; }
+        .status-card.interrupted { border-left-color: #cbd5e1; }
+        .status-label { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; color: #888; }
+        .status-detail { font-size: 0.88rem; margin-top: 4px; }
 
-        .profile-box { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-        .profile-box label { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #888; display: block; margin-bottom: 8px; }
+        .profile-box { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+        .profile-box label { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: #888; }
         .profile-box textarea {
             width: 100%; font-family: monospace; font-size: 0.85rem; color: #333;
             border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px;
-            resize: vertical; background: #fafafa;
+            resize: vertical; background: #fafafa; transition: background 0.2s;
         }
+        .profile-box textarea:not([readonly]) {
+            background: #fff; border-color: #f59e0b; outline: none;
+        }
+        .btn-lock {
+            padding: 4px 10px; border-radius: 6px; border: 1px solid #ddd;
+            background: #f5f5f5; font-size: 0.8rem; cursor: pointer; color: #555;
+        }
+        .btn-lock:hover { background: #e8e8e8; }
+        .profile-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 
         /* Articles */
         .article { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
@@ -97,6 +114,32 @@
         .score-low  { background: #94a3b8; }
 
         .empty { text-align: center; padding: 40px; color: #999; }
+        .toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 10px; margin-bottom: 12px;
+        }
+        .search-form { display: flex; gap: 8px; width: 100%; max-width: 560px; }
+        .search-form input {
+            flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .search-form button {
+            padding: 8px 12px; border: none; border-radius: 6px; background: #333;
+            color: #fff; font-size: 0.86rem; cursor: pointer;
+        }
+        .search-form a {
+            padding: 8px 12px; border-radius: 6px; text-decoration: none; background: #e5e7eb;
+            color: #333; font-size: 0.86rem;
+        }
+        .pagination {
+            display: flex; justify-content: center; align-items: center; gap: 12px;
+            margin: 20px 0;
+        }
+        .pagination a {
+            text-decoration: none; background: #e8e8e8; color: #333; padding: 6px 10px;
+            border-radius: 6px; font-size: 0.86rem;
+        }
+        .pagination span { font-size: 0.85rem; color: #666; }
     </style>
 </head>
 <body>
@@ -107,10 +150,7 @@
     <nav>
         <a href="/" class="{{ 'active' if tab == 'today' }}">Hoje</a>
         <a href="/history" class="{{ 'active' if tab == 'history' }}">Historico</a>
-        <a href="/status" class="{{ 'active' if tab == 'status' }}">Status</a>
-        <form method="post" action="/fetch" style="margin-left: auto;" id="form-fetch">
-            <button type="submit" class="btn btn-blue" id="btn-fetch">Buscar artigos</button>
-        </form>
+        <a href="/status" class="{{ 'active' if tab == 'status' }}">Configuracao</a>
     </nav>
 
     <!-- Progress card (shown by JS when a task is running) -->
@@ -128,49 +168,152 @@
         </div>
     </div>
 
-    {% if tab == 'status' or last_run %}
+    <!-- Pipeline panel: three action rows -->
+    <div class="pipeline">
+
+        <!-- Row 1: Buscar artigos -->
+        <div class="pipeline-row">
+            <span class="pipeline-label">Buscar artigos</span>
+            <span class="pipeline-status">
+                {% if fetch_stats and fetch_stats.count > 0 %}
+                    <span class="ok">{{ fetch_stats.count }} artigos hoje</span>
+                    {% if fetch_stats.last_at %}
+                     &mdash; {{ fetch_stats.last_at[:16] }}
+                    {% endif %}
+                {% else %}
+                    <span class="none">Nenhum artigo buscado hoje</span>
+                {% endif %}
+            </span>
+            <form method="post" action="/fetch" id="form-fetch">
+                <button type="submit" class="btn btn-blue" id="btn-fetch">Buscar</button>
+            </form>
+        </div>
+
+        <!-- Row 2: Classificar -->
+        <div class="pipeline-row">
+            <span class="pipeline-label">Classificar</span>
+            <span class="pipeline-status">
+                {% if classify_estimate and classify_estimate.count > 0 %}
+                    <span class="warn">{{ classify_estimate.count }} sem score</span>
+                {% else %}
+                    <span class="ok">Todos classificados</span>
+                {% endif %}
+                {% if last_classify %}
+                 &mdash; ultimo: {{ last_classify.started_at[:16] }}
+                {% else %}
+                 &mdash; <span class="none">nunca rodou</span>
+                {% endif %}
+            </span>
+            {% if classify_estimate and classify_estimate.count > 0 %}
+            <span class="pipeline-cost">~${{ "%.4f"|format(classify_estimate.cost_usd) }}</span>
+            <form method="post" action="/classify" id="form-classify">
+                <button type="submit" class="btn btn-green" id="btn-classify">Classificar</button>
+            </form>
+            {% else %}
+            <button class="btn btn-green" disabled>Classificar</button>
+            {% endif %}
+        </div>
+
+        <!-- Row 3: Resumir top 5 -->
+        <div class="pipeline-row">
+            <span class="pipeline-label">Resumir top 5</span>
+            <span class="pipeline-status">
+                {% if summary_estimate and summary_estimate.count > 0 %}
+                    <span class="warn">{{ summary_estimate.count }} sem resumo</span>
+                {% else %}
+                    <span class="ok">Resumos atualizados</span>
+                {% endif %}
+                {% if last_summarize %}
+                 &mdash; ultimo: {{ last_summarize.started_at[:16] }}
+                {% else %}
+                 &mdash; <span class="none">nunca rodou</span>
+                {% endif %}
+            </span>
+            {% if summary_estimate and summary_estimate.count > 0 %}
+            <span class="pipeline-cost">~${{ "%.4f"|format(summary_estimate.cost_usd) }}</span>
+            <form method="post" action="/summarize" id="form-summarize">
+                <button type="submit" class="btn btn-green" id="btn-summarize">Resumir</button>
+            </form>
+            {% else %}
+            <button class="btn btn-green" disabled>Resumir</button>
+            {% endif %}
+        </div>
+
+    </div>
+
+    {% if last_run %}
     <div class="status-card {{ last_run.status if last_run else '' }}">
         <div class="status-label">Ultima execucao</div>
-        {% if last_run %}
         <div class="status-detail">
             <strong>{{ last_run.status | upper }}</strong>
-            &mdash; {{ last_run.started_at }}
+            &mdash; {{ last_run.started_at[:16] }}
             &mdash; {{ last_run.articles_fetched }} buscados, {{ last_run.articles_classified }} classificados
             {% if last_run.input_tokens %}
-            &mdash; {{ last_run.input_tokens }} in / {{ last_run.output_tokens }} out tokens
-            &mdash; <strong>${{ "%.4f"|format((last_run.input_tokens * 3 + last_run.output_tokens * 15) / 1000000) }}</strong>
-            <span style="color:#aaa;font-size:0.8em;">($3/MTok in, $15/MTok out)</span>
+            &mdash; ${{ "%.4f"|format((last_run.input_tokens * 3 + last_run.output_tokens * 15) / 1000000) }}
             {% endif %}
             {% if last_run.error %}
             <br><span style="color:#ef4444;">Erro: {{ last_run.error }}</span>
             {% endif %}
-        </div>
-        {% else %}
-        <div class="status-detail">Nenhuma execucao registrada.</div>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    {% if tab == 'today' and estimate and estimate.count > 0 %}
-    <div class="estimate-card">
-        <span>
-            <strong>{{ estimate.count }}</strong> artigo(s) sem classificacao &mdash;
-            ~{{ estimate.input_tokens }} tokens entrada / ~{{ estimate.output_tokens }} saida
-        </span>
-        <div class="estimate-actions">
-            <span class="cost">~${{ "%.4f"|format(estimate.cost_usd) }}</span>
-            <form method="post" action="/classify" id="form-classify">
-                <button type="submit" class="btn btn-green" id="btn-classify">Classificar com IA</button>
-            </form>
         </div>
     </div>
     {% endif %}
 
     {% if tab == 'status' %}
     <div class="profile-box">
-        <label>Perfil de interesse (criterio de classificacao)</label>
-        <textarea rows="4" readonly>{{ interest_profile }}</textarea>
+        <div class="profile-header">
+            <label>Perfil de interesse (criterio de classificacao)</label>
+            <button type="button" class="btn-lock" id="btn-lock" onclick="unlockProfile()">🔒 Bloqueado</button>
+        </div>
+        <form method="post" action="/config/profile" id="form-profile">
+            <textarea name="profile" rows="8" id="profile-textarea" readonly>{{ interest_profile }}</textarea>
+            <div id="profile-actions" style="display:none; margin-top:10px; display:none; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn-lock" onclick="location.reload()">Cancelar</button>
+                <button type="submit" class="btn btn-green">Salvar e apagar todos os scores</button>
+            </div>
+        </form>
     </div>
+
+    <div class="profile-box">
+        <label>Como a classificacao funciona</label>
+        <div style="font-size:0.88rem; line-height:1.7; color:#444;">
+            <p style="margin-bottom:10px;">
+                Cada artigo passa por <strong>duas etapas</strong> de scoring com Claude antes de aparecer no historico.
+            </p>
+            <p style="margin-bottom:6px;"><strong>1. Score principal (0–10)</strong></p>
+            <ul style="margin-left:16px; margin-bottom:10px;">
+                <li><strong>9–10</strong> — escopo <em>primario</em> de um dos dois topicos: novo algoritmo quantico, prova de speedup, compressao de contexto em LLMs, memoria latente.</li>
+                <li><strong>7–8</strong> — escopo <em>secundario</em>: adjacente ao topico, ainda relevante. Ex: teoria de complexidade quantica, compressao de KV cache, attention eficiente.</li>
+                <li><strong>5–6</strong> — computacao quantica ou NLP/ML de forma geral, sem foco direto nos topicos.</li>
+                <li><strong>0–4</strong> — nao relacionado.</li>
+            </ul>
+            <p style="margin-bottom:6px;"><strong>2. Sub-score para artigos com score 9 (→ 9.0–9.9)</strong></p>
+            <ul style="margin-left:16px; margin-bottom:0;">
+                <li><strong>9.7–9.9</strong> — contribuicao primaria forte: resultado landmark, prova de speedup, ou breakthrough em compressao.</li>
+                <li><strong>9.5–9.6</strong> — contribuicao primaria solida, melhora o SOTA de forma significativa.</li>
+                <li><strong>9.3–9.4</strong> — contribuicao secundaria clara, dentro do escopo estendido do topico.</li>
+                <li><strong>9.0–9.2</strong> — alta relevancia mas novidade primaria fraca (hardware, empirico, periferico).</li>
+            </ul>
+            <p style="margin-top:10px; color:#888;">
+                Artigos com score 10 nao passam pela segunda etapa — ja foram considerados correspondencia perfeita com o escopo primario.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab == 'history' %}
+    <div class="toolbar">
+        <form method="get" action="/history" class="search-form">
+            <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar por titulo, autor, abstract, categoria ou ID">
+            <button type="submit">Buscar</button>
+            {% if q %}
+            <a href="/history">Limpar</a>
+            {% endif %}
+        </form>
+    </div>
+    {% endif %}
+
+    {% if tab == 'today' %}
+    <p class="subtitle">Mostrando somente artigos novos (ainda sem score).</p>
     {% endif %}
 
     {% if tab in ('today', 'history') %}
@@ -202,24 +345,37 @@
         {% else %}
             <div class="empty">
                 {% if tab == 'today' %}
-                    Nenhum artigo hoje. Clique em "Buscar artigos".
+                    Nenhum artigo novo hoje. Clique em "Buscar".
                 {% else %}
                     Nenhum artigo no historico.
                 {% endif %}
             </div>
         {% endif %}
     {% endif %}
+
+    {% if tab in ('today', 'history') and pagination and pagination.total_pages > 1 %}
+    <div class="pagination">
+        {% if pagination.prev_url %}
+        <a href="{{ pagination.prev_url }}">&larr; Anterior</a>
+        {% endif %}
+        <span>Pagina {{ pagination.page }} de {{ pagination.total_pages }}</span>
+        {% if pagination.next_url %}
+        <a href="{{ pagination.next_url }}">Proxima &rarr;</a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 
 <script>
 (function () {
-    const card   = document.getElementById('progress-card');
-    const step   = document.getElementById('progress-step');
-    const count  = document.getElementById('progress-count');
-    const cost   = document.getElementById('progress-cost');
-    const fill   = document.getElementById('progress-fill');
-    const btnF   = document.getElementById('btn-fetch');
-    const btnC   = document.getElementById('btn-classify');
+    const card  = document.getElementById('progress-card');
+    const step  = document.getElementById('progress-step');
+    const count = document.getElementById('progress-count');
+    const cost  = document.getElementById('progress-cost');
+    const fill  = document.getElementById('progress-fill');
+
+    const allBtns = ['btn-fetch', 'btn-classify', 'btn-summarize']
+        .map(id => document.getElementById(id)).filter(Boolean);
 
     let timer = null;
 
@@ -235,19 +391,16 @@
         step.textContent = s.step || '...';
 
         if (s.total > 0) {
-            count.textContent = s.processed + ' / ' + s.total + ' artigos';
+            count.textContent = s.processed + ' / ' + s.total;
             fill.style.width = pct(s) + '%';
         } else {
             count.textContent = '';
             fill.style.width = s.done ? '100%' : '30%';
         }
 
-        if (s.cost_usd > 0) {
-            cost.textContent = '$' + s.cost_usd.toFixed(4) + ' gastos';
-        }
+        if (s.cost_usd > 0) cost.textContent = '$' + s.cost_usd.toFixed(4) + ' gastos';
 
-        if (btnF) btnF.disabled = s.running;
-        if (btnC) btnC.disabled = s.running;
+        allBtns.forEach(b => { b.disabled = s.running; });
     }
 
     function poll() {
@@ -269,18 +422,34 @@
         timer = setInterval(poll, 1500);
     }
 
-    // On page load: check immediately, start polling if something is running
+    // Profile lock/unlock
+    window.unlockProfile = function() {
+        const ok = confirm(
+            "Atenção!\n\n" +
+            "Ao alterar o perfil de interesse, TODOS os scores e resumos existentes serão apagados " +
+            "e todos os artigos precisarão ser reclassificados do zero.\n\n" +
+            "Deseja continuar?"
+        );
+        if (!ok) return;
+        const ta = document.getElementById('profile-textarea');
+        const actions = document.getElementById('profile-actions');
+        const btnLock = document.getElementById('btn-lock');
+        ta.removeAttribute('readonly');
+        ta.focus();
+        actions.style.display = 'flex';
+        btnLock.textContent = '🔓 Desbloqueado';
+        btnLock.disabled = true;
+    };
+
     fetch('/progress').then(r => r.json()).then(s => {
         render(s);
         if (s.running) startPolling();
     });
 
-    // Disable buttons and start polling when a form is submitted
-    ['form-fetch', 'form-classify'].forEach(id => {
+    ['form-fetch', 'form-classify', 'form-summarize'].forEach(id => {
         const f = document.getElementById(id);
         if (f) f.addEventListener('submit', () => {
-            if (btnF) btnF.disabled = true;
-            if (btnC) btnC.disabled = true;
+            allBtns.forEach(b => { b.disabled = true; });
             setTimeout(startPolling, 800);
         });
     });
