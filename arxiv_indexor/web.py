@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 from fastapi import BackgroundTasks, FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from arxiv_indexor.classifier import DEFAULT_INTEREST_PROFILE, classify_articles, get_interest_profile, summarize_top_articles
+from arxiv_indexor.classifier import DEFAULT_INTEREST_PROFILE, classify_articles, subscore_articles, summarize_top_articles
 from arxiv_indexor.db import (
     clear_all_scores,
     finish_run,
@@ -11,6 +11,7 @@ from arxiv_indexor.db import (
     get_last_run,
     get_last_run_by_op,
     get_setting,
+    get_subscore_eligible,
     get_today_fetch_stats,
     get_today_new_articles_page,
     get_top_unsummarized,
@@ -56,19 +57,37 @@ def _estimate_summary_cost(articles: list[dict]) -> dict:
     return {"count": n, "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost}
 
 
+def _estimate_subscore_cost(articles: list[dict]) -> dict:
+    n = len(articles)
+    if n == 0:
+        return {"count": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+    chars = sum(
+        len(a.get("id", "")) + len(a.get("title", "")) + len((a.get("abstract") or "")[:600])
+        for a in articles
+    )
+    input_tokens = 300 + chars // 4
+    output_tokens = n * 20
+    cost = (input_tokens * _PRICE_INPUT + output_tokens * _PRICE_OUTPUT) / 1_000_000
+    return {"count": n, "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost}
+
+
 def _pipeline_ctx(conn) -> dict:
-    """Collect all pipeline state needed to render the three-action panel."""
+    """Collect all pipeline state needed to render the pipeline panel."""
     fetch_stats = get_today_fetch_stats(conn)
     unscored = get_unscored_articles(conn)
+    eligible = get_subscore_eligible(conn)
     unsummarized = get_top_unsummarized(conn, n=5)
     last_classify = get_last_run_by_op(conn, "classify")
+    last_subscore = get_last_run_by_op(conn, "subscore")
     last_summarize = get_last_run_by_op(conn, "summarize")
     interest_profile = get_setting(conn, "interest_profile", DEFAULT_INTEREST_PROFILE)
     return {
         "fetch_stats": fetch_stats,
         "classify_estimate": _estimate_classification_cost(unscored),
+        "subscore_estimate": _estimate_subscore_cost(eligible),
         "summary_estimate": _estimate_summary_cost(unsummarized),
         "last_classify": last_classify,
+        "last_subscore": last_subscore,
         "last_summarize": last_summarize,
         "interest_profile": interest_profile,
     }
@@ -147,6 +166,32 @@ def _run_classify():
         conn4.close()
 
 
+def _run_subscore():
+    _state.update({"running": True, "operation": "subscore", "step": "Sub-classificando (9.0–9.9)...",
+                   "processed": 0, "total": 0, "input_tokens": 0, "output_tokens": 0,
+                   "cost_usd": 0.0, "error": None, "done": False})
+    conn = get_conn()
+    run_id = insert_run(conn, operation="subscore")
+    conn.close()
+    try:
+        def on_progress(**kwargs):
+            _state.update({"step": "Sub-classificando (9.0–9.9)...", **kwargs})
+
+        subscored, input_tokens, output_tokens = subscore_articles(progress_cb=on_progress)
+        cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+        _state.update({"running": False, "done": True,
+                        "step": f"{subscored} artigos sub-classificados — ${cost:.4f} gastos"})
+
+        conn2 = get_conn()
+        finish_run(conn2, run_id, "success", 0, subscored, input_tokens=input_tokens, output_tokens=output_tokens)
+        conn2.close()
+    except Exception as e:
+        _state.update({"running": False, "error": str(e), "step": "Erro"})
+        conn3 = get_conn()
+        finish_run(conn3, run_id, "error", 0, 0, str(e))
+        conn3.close()
+
+
 def _run_summarize():
     _state.update({"running": True, "operation": "summarize", "step": "Gerando resumos...",
                    "processed": 0, "total": 0, "input_tokens": 0, "output_tokens": 0,
@@ -190,6 +235,13 @@ def trigger_classify(background_tasks: BackgroundTasks):
     if not _state["running"]:
         background_tasks.add_task(_run_classify)
     return RedirectResponse("/", status_code=303)
+
+
+@app.post("/subscore")
+def trigger_subscore(background_tasks: BackgroundTasks):
+    if not _state["running"]:
+        background_tasks.add_task(_run_subscore)
+    return RedirectResponse("/history", status_code=303)
 
 
 @app.post("/summarize")

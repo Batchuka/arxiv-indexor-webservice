@@ -4,7 +4,7 @@ from typing import Callable, cast
 import anthropic
 from anthropic.types import TextBlock
 from arxiv_indexor import get_settings
-from arxiv_indexor.db import get_conn, get_setting, get_unscored_articles, update_score, get_top_articles, get_top_unsummarized
+from arxiv_indexor.db import get_conn, get_setting, get_subscore_eligible, get_unscored_articles, update_score, get_top_unsummarized
 
 DEFAULT_INTEREST_PROFILE = """
 TOPIC 1 — Quantum Algorithms
@@ -65,16 +65,17 @@ def _build_scoring_prompt(articles: list[dict], profile: str) -> str:
         items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:500]}")
     articles_text = "\n---\n".join(items)
 
-    return f"""You are an academic paper relevance classifier.
+    return f"""You are an academic paper relevance classifier. The two topics below are equally important — score each independently on how well it matches either topic's PRIMARY or SECONDARY scope.
 
 Research interest profile:
 {profile}
 
-Rate each article from 0 to 10:
-- 9-10: directly about the PRIMARY scope of Topic 1 or Topic 2
-- 7-8: about the SECONDARY scope of Topic 1 or Topic 2 (adjacent within the same topic)
-- 5-6: quantum computing or NLP/ML broadly, but not specifically within either topic's scope
-- 0-4: unrelated or only tangentially related
+Scoring scale (both topics treated symmetrically):
+- 10: landmark paper squarely in the PRIMARY scope of Topic 1 OR Topic 2 — clear algorithmic/methodological novelty, rigorous contribution.
+- 9: solid paper in the PRIMARY scope of Topic 1 OR Topic 2.
+- 7-8: paper in the SECONDARY scope of Topic 1 OR Topic 2 (adjacent, within the broader topic area).
+- 5-6: related to one of the topic areas broadly but outside both primary and secondary scopes.
+- 0-4: unrelated or only tangentially related.
 
 Return a JSON array with objects having "id" (string) and "score" (integer 0-10).
 Only return the JSON array, no other text.
@@ -165,8 +166,10 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
                 if article_id not in batch_ids:
                     continue
                 try:
-                    score = float(item.get("score"))
+                    score = float(item.get("score") or 0)
                 except (TypeError, ValueError):
+                    continue
+                if score == 0:
                     continue
                 score = max(0.0, min(10.0, score))
                 update_score(conn, article_id, score)
@@ -180,22 +183,47 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
             progress_cb(step="scoring", processed=classified, total=total,
                         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 
-    # --- Pass 2: sub-score articles that scored exactly 9 (→ 9.0–9.9) ---
-    nines = [
-        dict(r) for r in conn.execute(
-            "SELECT * FROM articles WHERE score >= 9.0 AND score < 10.0 ORDER BY fetched_at DESC"
-        ).fetchall()
-    ]
-    if nines:
+    conn.close()
+    return classified, input_tokens, output_tokens
+
+
+def subscore_articles(progress_cb: Callable[..., None] | None = None) -> tuple[int, int, int]:
+    """Refine articles with integer score 9 → 9.0–9.9.
+
+    Returns (subscored_count, input_tokens, output_tokens).
+    """
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    conn = get_conn()
+    profile = get_setting(conn, "interest_profile", DEFAULT_INTEREST_PROFILE)
+    eligible = get_subscore_eligible(conn)
+
+    if not eligible:
+        conn.close()
+        return 0, 0, 0
+
+    total = len(eligible)
+    subscored = 0
+    input_tokens = 0
+    output_tokens = 0
+
+    # Batch of 10 — each response is ~50 tokens/article, safe under 1024 tokens
+    for i in range(0, total, 10):
+        batch = eligible[i : i + 10]
+        batch_ids = {a["id"] for a in batch}
+
         if progress_cb:
             cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
-            progress_cb(step="subscoring", processed=classified, total=total,
+            progress_cb(step="subscoring", processed=subscored, total=total,
                         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 
-        prompt = _build_subscore_prompt(nines, profile)
+        prompt = _build_subscore_prompt(batch, profile)
         response = client.messages.create(
             model=MODEL,
-            max_tokens=1024,
+            max_tokens=512,
             temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -205,28 +233,30 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
         text = cast(TextBlock, response.content[0]).text
         try:
             parsed = _load_json_array(text)
-            nine_ids = {a["id"] for a in nines}
             for item in parsed:
                 article_id = str(item.get("id", "")).strip()
-                if article_id not in nine_ids:
+                if article_id not in batch_ids:
                     continue
                 try:
-                    score = float(item.get("score"))
+                    score = float(item.get("score") or 0)
                 except (TypeError, ValueError):
+                    continue
+                if score == 0:
                     continue
                 score = max(9.0, min(9.9, score))
                 conn.execute("UPDATE articles SET score = ? WHERE id = ?", (score, article_id))
+                subscored += 1
             conn.commit()
         except Exception:
             conn.rollback()
 
-        if progress_cb:
-            cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
-            progress_cb(step="subscoring", processed=classified, total=total,
-                        input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
+    if progress_cb:
+        cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+        progress_cb(step="subscoring", processed=subscored, total=total,
+                    input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 
     conn.close()
-    return classified, input_tokens, output_tokens
+    return subscored, input_tokens, output_tokens
 
 
 def summarize_top_articles(n: int = 5, progress_cb: Callable[..., None] | None = None) -> tuple[int, int, int]:

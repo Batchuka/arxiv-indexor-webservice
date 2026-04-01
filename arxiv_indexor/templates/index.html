@@ -214,7 +214,32 @@
             {% endif %}
         </div>
 
-        <!-- Row 3: Resumir top 5 -->
+        <!-- Row 3: Sub-classificar -->
+        <div class="pipeline-row">
+            <span class="pipeline-label">Sub-classificar</span>
+            <span class="pipeline-status">
+                {% if subscore_estimate and subscore_estimate.count > 0 %}
+                    <span class="warn">{{ subscore_estimate.count }} com score 9 (sem refinar)</span>
+                {% else %}
+                    <span class="ok">Nenhum pendente</span>
+                {% endif %}
+                {% if last_subscore %}
+                 &mdash; ultimo: {{ last_subscore.started_at[:16] }}
+                {% else %}
+                 &mdash; <span class="none">nunca rodou</span>
+                {% endif %}
+            </span>
+            {% if subscore_estimate and subscore_estimate.count > 0 %}
+            <span class="pipeline-cost">~${{ "%.4f"|format(subscore_estimate.cost_usd) }}</span>
+            <form method="post" action="/subscore" id="form-subscore">
+                <button type="submit" class="btn btn-green" id="btn-subscore">Sub-classificar</button>
+            </form>
+            {% else %}
+            <button class="btn btn-green" disabled>Sub-classificar</button>
+            {% endif %}
+        </div>
+
+        <!-- Row 4: Resumir top 5 -->
         <div class="pipeline-row">
             <span class="pipeline-label">Resumir top 5</span>
             <span class="pipeline-status">
@@ -374,7 +399,7 @@
     const cost  = document.getElementById('progress-cost');
     const fill  = document.getElementById('progress-fill');
 
-    const allBtns = ['btn-fetch', 'btn-classify', 'btn-summarize']
+    const allBtns = ['btn-fetch', 'btn-classify', 'btn-subscore', 'btn-summarize']
         .map(id => document.getElementById(id)).filter(Boolean);
 
     let timer = null;
@@ -446,7 +471,7 @@
         if (s.running) startPolling();
     });
 
-    ['form-fetch', 'form-classify', 'form-summarize'].forEach(id => {
+    ['form-fetch', 'form-classify', 'form-subscore', 'form-summarize'].forEach(id => {
         const f = document.getElementById(id);
         if (f) f.addEventListener('submit', () => {
             allBtns.forEach(b => { b.disabled = true; });

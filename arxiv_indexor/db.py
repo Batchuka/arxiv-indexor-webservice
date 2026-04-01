@@ -119,6 +119,14 @@ def get_top_articles(conn: sqlite3.Connection, n: int = 5) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_subscore_eligible(conn: sqlite3.Connection) -> list[dict]:
+    """Articles with integer score 9 that have not yet been sub-scored (9.0–9.9)."""
+    rows = conn.execute(
+        "SELECT * FROM articles WHERE score = 9.0 ORDER BY fetched_at DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_top_unsummarized(conn: sqlite3.Connection, n: int = 5) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM articles WHERE score >= 9.0 AND summary IS NULL ORDER BY score DESC, fetched_at DESC LIMIT ?",
