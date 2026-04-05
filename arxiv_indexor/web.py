@@ -23,23 +23,25 @@ from arxiv_indexor.db import (
 )
 from arxiv_indexor.feed import fetch_articles
 
-# Pricing for claude-sonnet-4 ($/million tokens)
-_PRICE_INPUT = 3.0
-_PRICE_OUTPUT = 15.0
+# Pricing ($/million tokens)
+_PRICE_INPUT_SONNET = 3.0    # subscore + summarize
+_PRICE_OUTPUT_SONNET = 15.0
+_PRICE_INPUT_HAIKU = 0.80    # initial scoring pass
+_PRICE_OUTPUT_HAIKU = 4.0
 
 
 def _estimate_classification_cost(articles: list[dict]) -> dict:
     n = len(articles)
     if n == 0:
         return {"count": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
-    batches = (n + 19) // 20
+    batches = (n + 39) // 40  # batch size 40
     scoring_chars = sum(
-        len(a.get("id", "")) + len(a.get("title", "")) + len((a.get("abstract") or "")[:500])
+        len(a.get("id", "")) + len(a.get("title", "")) + len((a.get("abstract") or "")[:200])
         for a in articles
     )
     input_tokens = batches * 220 + scoring_chars // 4
     output_tokens = n * 25
-    cost = (input_tokens * _PRICE_INPUT + output_tokens * _PRICE_OUTPUT) / 1_000_000
+    cost = (input_tokens * _PRICE_INPUT_HAIKU + output_tokens * _PRICE_OUTPUT_HAIKU) / 1_000_000
     return {"count": n, "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost}
 
 
@@ -53,7 +55,7 @@ def _estimate_summary_cost(articles: list[dict]) -> dict:
     )
     input_tokens = 160 + chars // 4
     output_tokens = n * 80
-    cost = (input_tokens * _PRICE_INPUT + output_tokens * _PRICE_OUTPUT) / 1_000_000
+    cost = (input_tokens * _PRICE_INPUT_SONNET + output_tokens * _PRICE_OUTPUT_SONNET) / 1_000_000
     return {"count": n, "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost}
 
 
@@ -62,13 +64,23 @@ def _estimate_subscore_cost(articles: list[dict]) -> dict:
     if n == 0:
         return {"count": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
     chars = sum(
-        len(a.get("id", "")) + len(a.get("title", "")) + len((a.get("abstract") or "")[:600])
+        len(a.get("id", "")) + len(a.get("title", "")) + len((a.get("abstract") or "")[:350])
         for a in articles
     )
     input_tokens = 300 + chars // 4
     output_tokens = n * 20
-    cost = (input_tokens * _PRICE_INPUT + output_tokens * _PRICE_OUTPUT) / 1_000_000
+    cost = (input_tokens * _PRICE_INPUT_SONNET + output_tokens * _PRICE_OUTPUT_SONNET) / 1_000_000
     return {"count": n, "input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost}
+
+
+def _run_cost_usd(run: dict | None) -> float:
+    """Compute real cost of a stored run using the correct model pricing."""
+    if not run or not run.get("input_tokens"):
+        return 0.0
+    i, o = run["input_tokens"], run["output_tokens"]
+    if run.get("operation") == "classify":
+        return (i * _PRICE_INPUT_HAIKU + o * _PRICE_OUTPUT_HAIKU) / 1_000_000
+    return (i * _PRICE_INPUT_SONNET + o * _PRICE_OUTPUT_SONNET) / 1_000_000
 
 
 def _pipeline_ctx(conn) -> dict:
@@ -153,7 +165,7 @@ def _run_classify():
             _state.update({"step": labels.get(step, step), **kwargs})
 
         classified, input_tokens, output_tokens = classify_articles(progress_cb=on_progress)
-        cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+        cost = (input_tokens * _PRICE_INPUT_HAIKU + output_tokens * _PRICE_OUTPUT_HAIKU) / 1_000_000
         _state.update({"running": False, "done": True, "step": f"Concluido — ${cost:.4f} gastos"})
 
         conn3 = get_conn()
@@ -178,7 +190,7 @@ def _run_subscore():
             _state.update({"step": "Sub-classificando (9.0–9.9)...", **kwargs})
 
         subscored, input_tokens, output_tokens = subscore_articles(progress_cb=on_progress)
-        cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+        cost = (input_tokens * _PRICE_INPUT_SONNET + output_tokens * _PRICE_OUTPUT_SONNET) / 1_000_000
         _state.update({"running": False, "done": True,
                         "step": f"{subscored} artigos sub-classificados — ${cost:.4f} gastos"})
 
@@ -204,7 +216,7 @@ def _run_summarize():
             _state.update({"step": "Gerando resumos...", **kwargs})
 
         summarized, input_tokens, output_tokens = summarize_top_articles(n=5, progress_cb=on_progress)
-        cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+        cost = (input_tokens * _PRICE_INPUT_SONNET + output_tokens * _PRICE_OUTPUT_SONNET) / 1_000_000
         _state.update({"running": False, "done": True,
                         "step": f"{summarized} resumos gerados — ${cost:.4f} gastos"})
 
@@ -254,7 +266,7 @@ def trigger_summarize(background_tasks: BackgroundTasks):
 @app.post("/config/profile")
 async def save_profile(request: Request):
     form = await request.form()
-    profile = (form.get("profile") or "").strip()
+    profile = (form.get("profile") or "").strip() # type: ignore
     if profile:
         conn = get_conn()
         set_setting(conn, "interest_profile", profile)
@@ -276,6 +288,7 @@ def index(request: Request, page: int = Query(default=1, ge=1)):
         request, "today",
         articles=today,
         last_run=last_run,
+        last_run_cost=_run_cost_usd(last_run),
         pagination=_page_urls("/", page=current_page, total_pages=total_pages),
         **pipeline,
     ))
@@ -294,6 +307,7 @@ def history(request: Request, page: int = Query(default=1, ge=1), q: str = Query
         request, "history",
         articles=articles,
         last_run=last_run,
+        last_run_cost=_run_cost_usd(last_run),
         q=q,
         pagination=_page_urls("/history", page=current_page, total_pages=total_pages, q=q),
         **pipeline,
@@ -307,5 +321,5 @@ def status(request: Request):
     pipeline = _pipeline_ctx(conn)
     conn.close()
     return templates.TemplateResponse("index.html", _ctx(
-        request, "status", articles=[], last_run=last_run, **pipeline,
+        request, "status", articles=[], last_run=last_run, last_run_cost=_run_cost_usd(last_run), **pipeline,
     ))

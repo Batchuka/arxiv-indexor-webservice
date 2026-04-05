@@ -23,7 +23,8 @@ def get_interest_profile() -> str:
     conn.close()
     return profile
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-20250514"          # subscore + summarize
+SCORING_MODEL = "claude-haiku-4-5-20251001"  # initial scoring pass — ~10x cheaper
 
 
 def _extract_text_payload(text: str) -> str:
@@ -62,7 +63,7 @@ def _load_json_array(text: str) -> list[dict]:
 def _build_scoring_prompt(articles: list[dict], profile: str) -> str:
     items = []
     for a in articles:
-        items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:500]}")
+        items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:200]}")
     articles_text = "\n---\n".join(items)
 
     return f"""You are an academic paper relevance classifier. The two topics below are equally important — score each independently on how well it matches either topic's PRIMARY or SECONDARY scope.
@@ -87,7 +88,7 @@ Articles:
 def _build_subscore_prompt(articles: list[dict], profile: str) -> str:
     items = []
     for a in articles:
-        items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:600]}")
+        items.append(f"ID: {a['id']}\nTitle: {a['title']}\nAbstract: {a['abstract'][:350]}")
     body = "\n---\n".join(items)
 
     return (
@@ -143,15 +144,16 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
     output_tokens = 0
     total = len(articles)
 
-    # --- Pass 1: integer scoring (0–10) in batches of 20 ---
-    for i in range(0, total, 20):
-        batch = articles[i : i + 20]
+    # --- Pass 1: integer scoring (0–10) in batches of 40 ---
+    # Uses SCORING_MODEL (Haiku) — cheaper, sufficient for binary relevance filtering.
+    for i in range(0, total, 40):
+        batch = articles[i : i + 40]
         batch_ids = {a["id"] for a in batch}
         prompt = _build_scoring_prompt(batch, profile)
 
         response = client.messages.create(
-            model=MODEL,
-            max_tokens=2048,
+            model=SCORING_MODEL,
+            max_tokens=3500,
             temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -179,7 +181,7 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
             conn.rollback()
 
         if progress_cb:
-            cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+            cost = (input_tokens * 0.8 + output_tokens * 4.0) / 1_000_000  # Haiku pricing
             progress_cb(step="scoring", processed=classified, total=total,
                         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost)
 

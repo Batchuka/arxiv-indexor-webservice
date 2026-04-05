@@ -274,7 +274,7 @@
             &mdash; {{ last_run.started_at[:16] }}
             &mdash; {{ last_run.articles_fetched }} buscados, {{ last_run.articles_classified }} classificados
             {% if last_run.input_tokens %}
-            &mdash; ${{ "%.4f"|format((last_run.input_tokens * 3 + last_run.output_tokens * 15) / 1000000) }}
+            &mdash; ${{ "%.4f"|format(last_run_cost) }}
             {% endif %}
             {% if last_run.error %}
             <br><span style="color:#ef4444;">Erro: {{ last_run.error }}</span>
