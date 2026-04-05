@@ -171,8 +171,6 @@ def classify_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
                     score = float(item.get("score") or 0)
                 except (TypeError, ValueError):
                     continue
-                if score == 0:
-                    continue
                 score = max(0.0, min(10.0, score))
                 update_score(conn, article_id, score)
                 classified += 1
