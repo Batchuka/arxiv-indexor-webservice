@@ -241,10 +241,8 @@ def subscore_articles(progress_cb: Callable[..., None] | None = None) -> tuple[i
                     score = float(item.get("score") or 0)
                 except (TypeError, ValueError):
                     continue
-                if score == 0:
-                    continue
                 score = max(9.0, min(9.9, score))
-                conn.execute("UPDATE articles SET score = ? WHERE id = ?", (score, article_id))
+                conn.execute("UPDATE articles SET score = ?, subscored = 1 WHERE id = ?", (score, article_id))
                 subscored += 1
             conn.commit()
         except Exception:

@@ -163,7 +163,7 @@
                 <span class="progress-cost-live" id="progress-cost"></span>
             </span>
         </div>
-        <div class="progress-track">
+        <div class="progress-track" id="progress-track">
             <div class="progress-fill" id="progress-fill" style="width:0%"></div>
         </div>
     </div>
@@ -398,6 +398,7 @@
     const count = document.getElementById('progress-count');
     const cost  = document.getElementById('progress-cost');
     const fill  = document.getElementById('progress-fill');
+    const track = document.getElementById('progress-track');
 
     const allBtns = ['btn-fetch', 'btn-classify', 'btn-subscore', 'btn-summarize']
         .map(id => document.getElementById(id)).filter(Boolean);
@@ -415,12 +416,18 @@
         card.className = 'progress-card' + (s.done ? ' done' : s.error ? ' error' : '');
         step.textContent = s.step || '...';
 
-        if (s.total > 0) {
-            count.textContent = s.processed + ' / ' + s.total;
-            fill.style.width = pct(s) + '%';
-        } else {
-            count.textContent = '';
-            fill.style.width = s.done ? '100%' : '30%';
+        const isSummarize = s.operation === 'summarize';
+        track.style.display = isSummarize ? 'none' : '';
+        count.style.display = isSummarize ? 'none' : '';
+
+        if (!isSummarize) {
+            if (s.total > 0) {
+                count.textContent = s.processed + ' / ' + s.total;
+                fill.style.width = pct(s) + '%';
+            } else {
+                count.textContent = '';
+                fill.style.width = s.done ? '100%' : '30%';
+            }
         }
 
         if (s.cost_usd > 0) cost.textContent = '$' + s.cost_usd.toFixed(4) + ' gastos';
